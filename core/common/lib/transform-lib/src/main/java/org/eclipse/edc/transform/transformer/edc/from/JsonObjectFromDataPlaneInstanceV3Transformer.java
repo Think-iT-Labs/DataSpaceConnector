@@ -55,7 +55,7 @@ public class JsonObjectFromDataPlaneInstanceV3Transformer extends AbstractJsonLd
                 .add(TYPE, DataPlaneInstance.DATAPLANE_INSTANCE_TYPE)
                 .add(URL, dataPlaneInstance.getUrl().toString())
                 .add(LAST_ACTIVE, dataPlaneInstance.getLastActive())
-                .add(TURN_COUNT, dataPlaneInstance.getTurnCount());
+                .add(TURN_COUNT, 0);
 
         if (dataPlaneInstance.getProperties() != null && !dataPlaneInstance.getProperties().isEmpty()) {
             var propBuilder = jsonFactory.createObjectBuilder();

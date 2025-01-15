@@ -17,7 +17,6 @@ package org.eclipse.edc.api.auth.delegated;
 import org.eclipse.edc.api.auth.spi.ApiAuthenticationProvider;
 import org.eclipse.edc.api.auth.spi.AuthenticationService;
 import org.eclipse.edc.api.auth.spi.registry.ApiAuthenticationProviderRegistry;
-import org.eclipse.edc.api.auth.spi.registry.ApiAuthenticationRegistry;
 import org.eclipse.edc.keys.spi.KeyParserRegistry;
 import org.eclipse.edc.runtime.metamodel.annotation.Extension;
 import org.eclipse.edc.runtime.metamodel.annotation.Inject;
@@ -45,29 +44,19 @@ import static org.eclipse.edc.web.spi.configuration.WebServiceConfigurer.WEB_HTT
 @Extension(value = DelegatedAuthenticationExtension.NAME)
 public class DelegatedAuthenticationExtension implements ServiceExtension {
 
-    public static final int DEFAULT_VALIDATION_TOLERANCE = 5_000;
     public static final String NAME = "Delegating Authentication Service Extension";
-    private static final String KEY_URL_PROPERTY = "edc.api.auth.dac.key.url";
+    private static final int DEFAULT_VALIDATION_TOLERANCE = 5_000;
+    private static final String AUTH_KEY = "auth";
+    private static final String CONFIG_ALIAS = WEB_HTTP_PREFIX + ".<context>." + AUTH_KEY + ".";
+    private static final String DELEGATED_TYPE = "delegated";
 
-    @Deprecated(since = "0.7.1")
-    @Setting(description = "Duration (in ms) that the internal key cache is valid", defaultValue = "" + DEFAULT_CACHE_TIME_TO_LIVE, key = "edc.api.auth.dac.cache.validity", required = false)
-    private long cacheValidityMs;
-
-    @Deprecated(since = "0.7.1")
-    @Setting(description = "URL where the third-party IdP's public key(s) can be resolved", key = KEY_URL_PROPERTY, required = false, warnOnMissingConfig = true)
-    private String keyUrl;
-
-    public static final String AUTH_KEY = "auth";
-    public static final String CONFIG_ALIAS = WEB_HTTP_PREFIX + ".<context>." + AUTH_KEY + ".";
     @Setting(context = CONFIG_ALIAS, description = "URL where the third-party IdP's public key(s) can be resolved for the configured <context>")
     public static final String AUTH_KEY_URL = "dac.key.url";
     @Setting(context = CONFIG_ALIAS, description = "Duration (in ms) that the internal key cache is valid for the configured <context>", type = "Long", defaultValue = "" + DEFAULT_CACHE_TIME_TO_LIVE)
     public static final String AUTH_CACHE_VALIDITY_MS = "dac.cache.validity";
-    public static final String DELEGATED_TYPE = "delegated";
     @Setting(description = "Default token validation time tolerance (in ms), e.g. for nbf or exp claims", defaultValue = "" + DEFAULT_VALIDATION_TOLERANCE, key = "edc.api.auth.dac.validation.tolerance")
     private int validationTolerance;
-    @Inject
-    private ApiAuthenticationRegistry authenticationRegistry;
+
     @Inject
     private ApiAuthenticationProviderRegistry providerRegistry;
     @Inject
@@ -88,21 +77,10 @@ public class DelegatedAuthenticationExtension implements ServiceExtension {
     public void initialize(ServiceExtensionContext context) {
         var monitor = context.getMonitor().withPrefix("Delegated API Authentication");
 
-        if (keyUrl == null) {
-            monitor.warning("The '%s' setting was not provided, so the DelegatedAuthenticationService will NOT be registered. In this case, the TokenBasedAuthenticationService usually acts as fallback.".formatted(KEY_URL_PROPERTY));
-            return;
-        }
-
-        //todo: currently, only JWKS urls are supported
-        var resolver = JwksPublicKeyResolver.create(keyParserRegistry, keyUrl, monitor, cacheValidityMs);
-
         tokenValidationRulesRegistry.addRule(MANAGEMENT_API_CONTEXT, new NotBeforeValidationRule(clock, validationTolerance, true));
         tokenValidationRulesRegistry.addRule(MANAGEMENT_API_CONTEXT, new ExpirationIssuedAtValidationRule(clock, validationTolerance, true));
 
-        // always register - this would potentially overwrite other services
-        authenticationRegistry.register("management-api", new DelegatedAuthenticationService(resolver, monitor, tokenValidationService, tokenValidationRulesRegistry));
-
-        providerRegistry.register(DELEGATED_TYPE, (cfg) -> delegatedProvider(monitor, cfg));
+        providerRegistry.register(DELEGATED_TYPE, config -> delegatedProvider(monitor, config));
     }
 
     public Result<AuthenticationService> delegatedProvider(Monitor monitor, Config config) {
